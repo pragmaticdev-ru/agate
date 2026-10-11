@@ -1,0 +1,69 @@
+# Dist-repo release finalizer (synchronized into the private dist repo at
+# .github/workflows/publish.yml by scripts/publish-release.ps1).
+#
+# The local script builds agate.exe, pushes the metadata tree (LICENSE, VERSION,
+# plugins/, sha256sums.txt) and creates a *draft* release with the exe as an
+# asset. This workflow then flips the draft to a published `--latest` release and
+# commits the regenerated metadata (latest.json, releases.md).
+#
+# Trigger is workflow_dispatch only (never `release: published`), so unpublishing
+# the draft cannot recurse back into this workflow. No source code is present in
+# this repository; the binary exists only as a release asset.
+name: publish-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the tag prefix, e.g. 0.3.39"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "publish-${{ inputs.version }}"
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify VERSION matches the dispatched version
+        run: test "$(tr -d '[:space:]' < VERSION)" = "${{ inputs.version }}"
+
+      - name: Publish the draft release as latest
+        run: >
+          gh release edit "v${{ inputs.version }}"
+          --draft=false
+          --title "Agate ${{ inputs.version }}"
+          --latest
+
+      - name: Regenerate release metadata
+        run: |
+          set -euo pipefail
+          gh release list --limit 100 --json tagName,name,publishedAt,isLatest > /tmp/rel.json
+          jq -n --arg v "${{ inputs.version }}" '{version:$v, tag:("v"+$v)}' > latest.json
+          {
+            echo "# Releases"
+            echo
+            echo "| Version | Tag | Published | Latest |"
+            echo "|---|---|---|---|"
+            jq -r 'sort_by(.publishedAt) | reverse | .[]
+                   | "| \(.name) | \(.tagName) | \(.publishedAt) | \(if .isLatest then "yes" else "" end) |"' \
+              /tmp/rel.json
+          } > releases.md
+
+      - name: Commit metadata
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add latest.json releases.md
+          git diff --cached --quiet || git commit -m "chore: metadata ${{ inputs.version }}"
+          git push

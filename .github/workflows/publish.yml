@@ -1,10 +1,13 @@
-# Dist-repo release finalizer (synchronized into the private dist repo at
+# Dist-repo release finalizer (synchronized into the public dist repo at
 # .github/workflows/publish.yml by scripts/publish-release.ps1).
 #
-# The local script builds agate.exe, pushes the metadata tree (LICENSE, VERSION,
-# plugins/, sha256sums.txt) and creates a *draft* release with the exe as an
-# asset. This workflow then flips the draft to a published `--latest` release and
-# commits the regenerated metadata (latest.json, releases.md).
+# The local script builds agate.exe, builds and signs latest.json, pushes the
+# metadata tree (LICENSE, VERSION, plugins/, sha256sums.txt, latest.json) and
+# creates a *draft* release with the exe as an asset. This workflow then flips the
+# draft to a published `--latest` release and commits the release index
+# (releases.md). latest.json is owned by the local script, so the signed pointer
+# and the asset it names are always published together; this workflow never
+# rewrites latest.json (no jq regeneration on the CI side).
 #
 # Trigger is workflow_dispatch only (never `release: published`), so unpublishing
 # the draft cannot recurse back into this workflow. No source code is present in
@@ -44,11 +47,10 @@ jobs:
           --title "Agate ${{ inputs.version }}"
           --latest
 
-      - name: Regenerate release metadata
+      - name: Regenerate release index
         run: |
           set -euo pipefail
           gh release list --limit 100 --json tagName,name,publishedAt,isLatest > /tmp/rel.json
-          jq -n --arg v "${{ inputs.version }}" '{version:$v, tag:("v"+$v)}' > latest.json
           {
             echo "# Releases"
             echo
@@ -64,6 +66,6 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add latest.json releases.md
+          git add releases.md
           git diff --cached --quiet || git commit -m "chore: metadata ${{ inputs.version }}"
           git push

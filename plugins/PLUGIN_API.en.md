@@ -94,6 +94,55 @@ extern "C" __declspec(dllexport) const AgatePluginV1* agate_plugin_v1(void) {
 }
 ```
 
+## Drawing scale in PDF
+
+So the canvas can measure Length/Area in drawing units (mm/m) with a `1:S`
+scale, the converter must embed the standard viewport/`Measure` table into the
+output PDF (ISO 32000 §12.9). Without it, agate shows values in sheet
+centimetres.
+
+For each page, add a viewport with `Measure`:
+
+```
+<</Type /Viewport /BBox [x0 y0 x1 y1]
+   /Measure <</Type /Measure /Subtype /RL
+      /D [<</C 35.28 /F /D /U (mm)>>]     % distances
+      /A [<</C 1244.7 /F /D /U (mm2)>>]   % areas
+      /X [<</C 35.28 /F /D /U (mm)>>]     % coordinate (compatibility)
+      /R (1:100)>> >>
+```
+
+- `/D`, `/A` (and the optional `/X`) are number formats: either a single
+  dictionary or an array of dictionaries; agate reads both forms and takes the
+  first entry with a non-empty `/U`;
+- `/C` is the coefficient: how many drawing units per PDF point
+  (`1 pt = 1/72 in`); `/F /D` is the decimal format; `/U` is the unit prefix as
+  an **ASCII** string (`mm`, `mm2`, not “²”); **an empty `/U ( )` means “no
+  scale”** — agate then honestly falls back to sheet centimetres;
+- `/R` is the scale text (e.g. `(1:100)`).
+
+Coefficient formula: `C = (25.4/72)·S·k`, where `S` is the scale denominator
+(`1:S`) and `k` is drawing units per millimetre:
+
+| Unit | `k` |
+|---|---|
+| mm | 1 |
+| cm | 0.1 |
+| m | 0.001 |
+| in | 1/25.4 |
+| ft | 1/304.8 |
+
+Area: `A = C²` (unit `/U` — `mm2` etc.).
+
+Examples: a drawing in mm at 1:100 → `C = (25.4/72)·100·1 ≈ 35.28`; a drawing
+in metres at 1:500 → `C = (25.4/72)·500·0.001 ≈ 0.176`.
+
+The table can be injected with an incremental PDF update (new objects + xref +
+trailer with `/Prev`) when the file is not encrypted, not linearised, has no
+object streams and uses a classic xref; otherwise rewrite the file fully
+(`lopdf` or equivalent). agate reads both number-format forms and treats an
+empty `/U` as “no scale”.
+
 ## Cache and performance
 
 - A conversion result is cached in `%LOCALAPPDATA%\agate\plugin-cache` and reused

@@ -1,12 +1,13 @@
 # Dist-repo release finalizer (synchronized into the public dist repo at
 # .github/workflows/publish.yml by scripts/publish-release.ps1).
 #
-# The local script builds agate.exe, builds and signs latest.json, pushes the
-# metadata tree (LICENSE, VERSION, plugins/, sha256sums.txt, latest.json) and
-# creates a *draft* release with the exe as an asset. This workflow then flips the
-# draft to a published `--latest` release and commits the release index
-# (releases.md). latest.json is owned by the local script, so the signed pointer
-# and the asset it names are always published together; this workflow never
+# The local script builds agate.exe (and attaches the Linux `agate` asset), builds
+# and signs latest.json, pushes the metadata tree (LICENSE, VERSION, plugins/,
+# sha256sums.txt, publish.yml) and creates a *draft* release with the assets. This
+# workflow verifies the required assets are attached, then flips the draft to a
+# published `--latest` release and commits the release index (releases.md). The
+# local script commits latest.json only AFTER this flip (fail-closed: the channel
+# never names an asset that is not yet published), so this workflow never reads or
 # rewrites latest.json (no jq regeneration on the CI side).
 #
 # Trigger is workflow_dispatch only (never `release: published`), so unpublishing
@@ -21,6 +22,11 @@ on:
         description: "Release version without the tag prefix, e.g. 0.3.39"
         required: true
         type: string
+      unix:
+        description: "Whether the signed pointer carries a unix block (true/false); asserted against the release assets"
+        required: false
+        type: string
+        default: "false"
 
 permissions:
   contents: write
@@ -39,6 +45,22 @@ jobs:
 
       - name: Verify VERSION matches the dispatched version
         run: test "$(tr -d '[:space:]' < VERSION)" = "${{ inputs.version }}"
+
+      - name: Verify the required release assets are attached
+        run: |
+          set -euo pipefail
+          # This repository holds no binary; the assets must already be attached
+          # to the draft by scripts/publish-release.ps1. latest.json is committed
+          # only AFTER this workflow flips the release, so its unix-block status is
+          # passed as the `unix` input, not read from the (still previous) pointer.
+          names=$(gh release view "v${{ inputs.version }}" --json assets -q '.assets[].name')
+          echo "$names"
+          echo "$names" | grep -qx 'agate.exe' || { echo "missing asset: agate.exe"; exit 1; }
+          if [ "${{ inputs.unix }}" = "true" ]; then
+            echo "$names" | grep -qx 'agate' || { echo "latest.json will name a unix asset but the release has no 'agate' asset"; exit 1; }
+          else
+            echo "no unix block is being published; skipping the agate assertion"
+          fi
 
       - name: Publish the draft release as latest
         run: >

@@ -66,7 +66,7 @@ jobs:
         run: >
           gh release edit "v${{ inputs.version }}"
           --draft=false
-          --title "Agate ${{ inputs.version }}"
+          --title "Agate ${{ inputs.version }} (Windows x64${{ inputs.unix == 'true' && ', Linux x64' || '' }})"
           --latest
 
       - name: Regenerate release index

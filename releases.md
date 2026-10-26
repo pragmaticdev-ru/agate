@@ -2,7 +2,8 @@
 
 | Version | Tag | Published | Latest |
 |---|---|---|---|
-| Agate 0.7.110 (Windows x64, Linux x64) | v0.7.110 | 2026-10-25T10:45:56Z | yes |
+| Agate 0.7.115 (Windows x64, Linux x64) | v0.7.115 | 2026-10-26T13:05:57Z | yes |
+| Agate 0.7.110 (Windows x64, Linux x64) | v0.7.110 | 2026-10-25T10:45:56Z |  |
 | Agate 0.6.96 (Windows x64, Linux x64) | v0.6.96 | 2026-10-20T14:09:26Z |  |
 | Agate 0.3.65 | v0.3.65 | 2026-10-14T14:03:45Z |  |
 | Agate 0.3.64 | v0.3.64 | 2026-10-14T11:56:41Z |  |
